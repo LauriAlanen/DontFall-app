@@ -5,6 +5,9 @@ Built into the image by the `dontfall-app` recipe in the
 [DontFall](https://github.com/LauriAlanen/DontFall) integration repo and
 installed as `/usr/local/bin/dontfall-app`.
 
+Full workflow across all DontFall repos (setup, dev loops, release):
+[DontFall/docs/development.md](https://github.com/LauriAlanen/DontFall/blob/main/docs/development.md).
+
 ## Develop
 
 Keep this checkout next to the integration workspace
