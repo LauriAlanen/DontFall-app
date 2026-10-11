@@ -30,22 +30,45 @@ def run_app(dev):
                             stderr=subprocess.PIPE, text=True)
 
 
+def communicate(proc, timeout):
+    # Popen.communicate leaves the child running on TimeoutExpired.
+    try:
+        return proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        raise
+
+
 def test_reply():
     master, slave = pty.openpty()
     proc = run_app(os.ttyname(slave))
     got = read_line(master, 3)
     assert got == b"hello from A7\n", f"app sent {got!r}"
     os.write(master, b"hello from M4: hello from A7\n")
-    out, err = proc.communicate(timeout=5)
+    out, err = communicate(proc, 5)
     assert proc.returncode == 0, f"exit {proc.returncode}, stderr {err!r}"
     assert "hello from M4: hello from A7" in out, f"stdout {out!r}"
+
+
+def test_partial_reply():
+    # A reply without a trailing newline is still a reply: at the deadline
+    # the app prints what it got and exits 0.
+    master, slave = pty.openpty()
+    proc = run_app(os.ttyname(slave))
+    got = read_line(master, 3)
+    assert got == b"hello from A7\n", f"app sent {got!r}"
+    os.write(master, b"partial reply, no newline")
+    out, err = communicate(proc, 5)
+    assert proc.returncode == 0, f"exit {proc.returncode}, stderr {err!r}"
+    assert "partial reply, no newline" in out, f"stdout {out!r}"
 
 
 def test_timeout():
     master, slave = pty.openpty()
     start = time.monotonic()
     proc = run_app(os.ttyname(slave))
-    out, err = proc.communicate(timeout=6)
+    out, err = communicate(proc, 6)
     assert proc.returncode == 2, f"exit {proc.returncode}, stderr {err!r}"
     assert time.monotonic() - start < 4, "timeout took too long"
     assert "no reply from M4" in err, f"stderr {err!r}"
@@ -53,14 +76,15 @@ def test_timeout():
 
 def test_missing_device():
     proc = run_app("/nonexistent/tty")
-    out, err = proc.communicate(timeout=5)
+    out, err = communicate(proc, 5)
     assert proc.returncode == 1, f"exit {proc.returncode}, stderr {err!r}"
     assert "cannot open /nonexistent/tty" in err, f"stderr {err!r}"
 
 
 if __name__ == "__main__":
     failed = 0
-    for test in (test_reply, test_timeout, test_missing_device):
+    for test in (test_reply, test_partial_reply, test_timeout,
+                 test_missing_device):
         try:
             test()
             print(f"PASS {test.__name__}")

@@ -33,11 +33,18 @@ std::string read_line(int fd, int timeout_ms)
             break;
 
         pollfd pfd {fd, POLLIN, 0};
-        if (poll(&pfd, 1, static_cast<int>(left)) <= 0)
+        int ready;
+        do {
+            ready = poll(&pfd, 1, static_cast<int>(left));
+        } while (ready < 0 && errno == EINTR);
+        if (ready <= 0)
             break;
 
         char buf[256];
-        const ssize_t n = read(fd, buf, sizeof(buf));
+        ssize_t n;
+        do {
+            n = read(fd, buf, sizeof(buf));
+        } while (n < 0 && errno == EINTR);
         if (n <= 0)
             break;
         line.append(buf, static_cast<size_t>(n));
