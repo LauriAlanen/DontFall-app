@@ -1,0 +1,4 @@
+/build*/
+# symlinks dropped by bitbake's externalsrc class
+/oe-workdir
+/oe-logs
