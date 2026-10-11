@@ -7,3 +7,11 @@ target_compile_definitions(dontfall-app PRIVATE APP_VERSION="${PROJECT_VERSION}"
 
 include(GNUInstallDirs)
 install(TARGETS dontfall-app RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME rpmsg_hello
+             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_rpmsg_hello.py
+                     $<TARGET_FILE:dontfall-app>)
+endif()
