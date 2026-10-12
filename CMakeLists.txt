@@ -14,4 +14,7 @@ if(BUILD_TESTING)
     add_test(NAME rpmsg_hello
              COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_rpmsg_hello.py
                      $<TARGET_FILE:dontfall-app>)
+    add_test(NAME blink
+             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_blink.py
+                     $<TARGET_FILE:dontfall-app>)
 endif()

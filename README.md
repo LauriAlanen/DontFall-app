@@ -26,6 +26,15 @@ Quick host build (no cross compiler, for compile errors and tests):
 cmake -B build && cmake --build build && ./build/dontfall-app
 ```
 
+## Blink mode
+
+`dontfall-app --led <sysfs-led-dir>` runs forever: it takes over a Linux
+LED-class LED (writes `none` to `trigger`, then toggles `brightness` every
+1000 ms) after doing the one-shot OpenAMP hello. SIGTERM turns the LED off
+and restores its original trigger. The DontFall image starts it this way as
+`dontfall-app.service` on `/sys/class/leds/heartbeat` (blue LD8); without
+`--led` the app is still a one-shot hello.
+
 ## Release
 
 Commit and push, then bump `SRCREV` in
