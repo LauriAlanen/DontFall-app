@@ -1,20 +1,16 @@
 cmake_minimum_required(VERSION 3.16)
-project(dontfall-app VERSION 0.1.0 LANGUAGES CXX)
+project(dontfall-app VERSION 0.2.0 LANGUAGES CXX)
 
-add_executable(dontfall-app src/main.cpp)
+add_executable(dontfall-app
+    src/main.cpp
+    src/heartbeat.cpp
+    src/protocol.cpp
+    src/rpmsg_tty.cpp
+    src/sysfs_led.cpp
+)
 target_compile_features(dontfall-app PRIVATE cxx_std_17)
+target_compile_options(dontfall-app PRIVATE -Wall -Wextra)
 target_compile_definitions(dontfall-app PRIVATE APP_VERSION="${PROJECT_VERSION}")
 
 include(GNUInstallDirs)
 install(TARGETS dontfall-app RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-
-include(CTest)
-if(BUILD_TESTING)
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
-    add_test(NAME rpmsg_hello
-             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_rpmsg_hello.py
-                     $<TARGET_FILE:dontfall-app>)
-    add_test(NAME blink
-             COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_blink.py
-                     $<TARGET_FILE:dontfall-app>)
-endif()
