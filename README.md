@@ -20,20 +20,20 @@ cd ../DontFall
 ./deploy.sh <board-ip> --run /usr/local/bin/dontfall-app   # build + push + run
 ```
 
-Quick host build (no cross compiler, for compile errors):
+Compile check only (it is a ROS 2 node, so it builds against the Yocto
+sysroot, not on the host):
 
 ```sh
-cmake -B build && cmake --build build
+cd ../DontFall && ./build.sh bitbake dontfall-app
 ```
 
 ## What it does
 
-`dontfall-app [--led <sysfs-led-dir>] [device]` runs the A7 side of the
-A7 <-> M4 heartbeat until SIGTERM/SIGINT. Every 500 ms it sends
-`PING <seq>` on `/dev/ttyRPMSG0`; the M4 answers `PONG <seq>` (protocol:
-`DontFall-M4/app/src/protocol.h`). The link is up while PONGs come back
-within 1.5 s, and the app logs `M4 link up` / `M4 link lost`. If the M4
-restarts, the app reopens the tty when it reappears.
+`dontfall-app [--led <sysfs-led-dir>]` is the A7's ROS 2 node
+`dontfall_app`. For now it watches the M4: the link is up while the M4's
+statuses (`dontfall_m4: ...`) arrive on `/diagnostics`, sent at 1 Hz by
+the M4's micro-ROS node through the micro-ROS Agent; 3 s without one and
+it is lost. It logs `M4 link up` / `M4 link lost`.
 
 With `--led` it takes over a Linux LED-class LED (writes `none` to
 `trigger`) and blinks it every 1000 ms while the link is up; on exit the
@@ -42,14 +42,6 @@ LED is turned off and its original trigger restored. The image runs it as
 
 | File | Role |
 |------|------|
-| `src/main.cpp` | arguments, signals, the `poll()` event loop |
-| `src/heartbeat.cpp` | PING schedule and link up/lost state machine (no I/O) |
-| `src/protocol.cpp` | PING/PONG wire format, line reassembly |
-| `src/rpmsg_tty.cpp` | raw, non-blocking `/dev/ttyRPMSG0` |
+| `src/main.cpp` | arguments, the node: `/diagnostics` subscription, LED timer |
+| `src/m4_link.cpp` | link up/lost from status arrival times (no I/O) |
 | `src/sysfs_led.cpp` | LED-class takeover and restore |
-
-## Release
-
-Commit and push, then bump `SRCREV` in
-`DontFall/meta-df/meta-df-common/recipes-df/dontfall-app/dontfall-app.bb`
-to the new commit and rebuild the image without `conf/dev.conf`.
