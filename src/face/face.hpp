@@ -1,6 +1,6 @@
 // The face model: what the eyes look like, as plain numbers. No drawing
-// code here; the renderer turns these into pixels (docs/face-plan.md in
-// DontFall, "The code's shape").
+// code here; the renderer turns these into pixels
+// (docs/archive/face-plan.md in DontFall, "The code's shape").
 //
 // Units are logical pixels: the screen as the face sees it, origin top
 // left, y down, whatever way the panel is mounted.

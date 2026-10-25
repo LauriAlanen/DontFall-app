@@ -1,5 +1,5 @@
-// dontfall-face: the robot's eyes on the DSI panel (docs/face-plan.md in
-// DontFall).
+// dontfall-face: the robot's eyes on the DSI panel
+// (docs/archive/face-plan.md in DontFall).
 //
 // SDL2 opens the panel fullscreen through DRM/KMS with an OpenGL ES 2.0
 // context (ST's gcnano driver); there is no compositor, this program owns
