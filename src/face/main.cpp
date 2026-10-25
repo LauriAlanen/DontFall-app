@@ -8,7 +8,10 @@
 // vsync, which paces the loop.
 //
 // --demo steps through the mood table, to see and tune every mood
-// (temporary, face plan step 3).
+// (temporary, face plan step 3); --mood <name> holds one of them.
+// --stats prints the frame rate every few seconds; --gpu-time adds the
+// GPU's drawing time per frame (it waits for the GPU with glFinish() each
+// frame to measure it, which itself slows the loop down a little).
 //
 // Runs until SIGTERM/SIGINT (SDL turns both into SDL_QUIT).
 #include <chrono>
@@ -16,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <string_view>
 
 #include <SDL.h>
 
@@ -37,6 +41,8 @@ using dontfall::face::Clock;
 // --demo: time on each mood, and how long the change to the next takes
 constexpr auto demo_hold = 2s;
 constexpr auto demo_change = 400ms;
+// --stats: how often to print the frame rate
+constexpr auto stats_period = 5s;
 
 // How the logical screen is turned on the portrait 480x800 panel. 90 =
 // landscape; the real value comes with the robot (face plan, open questions).
@@ -44,7 +50,8 @@ constexpr int default_rotation = 90;
 
 int usage()
 {
-    std::fprintf(stderr, "usage: dontfall-face [--rotation 0|90|180|270] [--demo]\n");
+    std::fprintf(stderr, "usage: dontfall-face [--rotation 0|90|180|270] [--demo | --mood <name>]"
+                         " [--stats] [--gpu-time]\n");
     return 1;
 }
 
@@ -65,11 +72,25 @@ int main(int argc, char **argv)
 
     int rotation = default_rotation;
     bool demo = false;
+    const dontfall::face::Mood *fixed_mood = nullptr;
+    bool stats = false;
+    bool gpu_time = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--rotation") == 0 && i + 1 < argc)
             rotation = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--demo") == 0)
             demo = true;
+        else if (std::strcmp(argv[i], "--mood") == 0 && i + 1 < argc) {
+            const std::string_view name = argv[++i];
+            for (const auto &m : dontfall::face::moods)
+                if (m.name == name)
+                    fixed_mood = &m.mood;
+            if (!fixed_mood)
+                return usage();
+        } else if (std::strcmp(argv[i], "--stats") == 0)
+            stats = true;
+        else if (std::strcmp(argv[i], "--gpu-time") == 0)
+            gpu_time = stats = true;
         else
             return usage();
     }
@@ -102,10 +123,14 @@ int main(int argc, char **argv)
         dontfall::face::Renderer renderer;
         std::string error;
         if (renderer.init(panel_width, panel_height, rotation, error)) {
-            dontfall::face::Tween<dontfall::face::Mood> mood(dontfall::face::neutral);
+            dontfall::face::Tween<dontfall::face::Mood> mood(
+                fixed_mood ? *fixed_mood : dontfall::face::neutral);
             dontfall::face::Idle idle(Clock::now());
             size_t demo_mood = 0;
             auto next_mood = Clock::now() + demo_hold;
+            int frames = 0;
+            Clock::duration drawing {};
+            auto stats_start = Clock::now();
             for (bool running = true; running;) {
                 SDL_Event event;
                 while (SDL_PollEvent(&event))
@@ -123,7 +148,24 @@ int main(int argc, char **argv)
                 }
                 renderer.draw(dontfall::face::make_face(renderer.width(), renderer.height(),
                                                         mood.at(now), idle.at(now)));
+                if (gpu_time) {
+                    glFinish();  // wait for the GPU to finish this frame
+                    drawing += Clock::now() - now;
+                }
                 SDL_GL_SwapWindow(window);
+
+                ++frames;
+                if (stats && now - stats_start >= stats_period) {
+                    using ms = std::chrono::duration<float, std::milli>;
+                    std::printf("%.1f fps",
+                                frames / std::chrono::duration<float>(now - stats_start).count());
+                    if (gpu_time)
+                        std::printf(", drawing %.1f ms per frame", ms(drawing).count() / frames);
+                    std::printf("\n");
+                    frames = 0;
+                    drawing = {};
+                    stats_start = now;
+                }
             }
         } else {
             std::fprintf(stderr, "renderer: %s\n", error.c_str());

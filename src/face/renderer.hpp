@@ -1,5 +1,6 @@
-// Draws a Face with OpenGL ES 2.0: one full-screen rectangle and the eye
-// shader (eye_shader.hpp). Needs a current GLES 2.0 context.
+// Draws a Face with OpenGL ES 2.0: per eye one rectangle just big enough
+// for the eye and its glow, filled by the eye shader (eye_shader.hpp).
+// Needs a current GLES 2.0 context.
 #pragma once
 
 #include <string>
@@ -29,19 +30,17 @@ public:
     void draw(const Face &face);
 
 private:
-    GLuint program_ = 0;
-    GLuint quad_ = 0;  // vertex buffer
-    GLint a_pos_ = -1;
-    struct EyeUniforms {
-        GLint shape = -1;
-        GLint top = -1;
-        GLint bottom = -1;
-    };
-    void set_eye(const EyeUniforms &u, const Eye &eye);
+    void draw_eye(const Eye &eye);
 
-    EyeUniforms left_;
-    EyeUniforms right_;
+    GLuint program_ = 0;
+    GLuint quad_ = 0;  // vertex buffer: the unit square
+    GLint u_rect_ = -1;
+    GLint u_shape_ = -1;
     GLint u_radius_ = -1;
+    GLint u_top_ = -1;
+    GLint u_bottom_ = -1;
+    GLint u_lids_ = -1;
+    GLint u_color_ = -1;
     float width_ = 0;
     float height_ = 0;
 };
