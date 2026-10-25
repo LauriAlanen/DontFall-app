@@ -29,33 +29,56 @@ struct Face {
     Eye right;
 };
 
-// The eyes for a mood on a screen of the given logical size.
-inline Face make_face(float screen_width, float screen_height, const Mood &mood)
+// Where the eyes look: -1..1 from the middle, + = right and down.
+struct Gaze {
+    float x = 0;
+    float y = 0;
+};
+
+inline Gaze mix(const Gaze &a, const Gaze &b, float t)
 {
-    // The neutral eye and where the two sit.
+    return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t};
+}
+
+// What changes from moment to moment on top of the mood.
+struct Look {
+    Gaze gaze;
+    float blink = 0;  // 0 open .. 1 shut
+};
+
+// The eyes for a mood and a look on a screen of the given logical size.
+inline Face make_face(float screen_width, float screen_height, const Mood &mood,
+                      const Look &look = {})
+{
+    // The neutral eye, where the two sit, and how far they move to look.
     const float base_width = screen_width * 0.22f;
     const float base_height = screen_height * 0.45f;
     const float spacing = screen_width * 0.22f;  // eye centre to screen centre
+    const float reach_x = screen_width * 0.12f;
+    const float reach_y = screen_height * 0.10f;
+    // Looking to one side, the eye on that side grows and the other shrinks
+    // a little: a hint of the head turning.
+    const float turn = 0.08f * look.gaze.x;
+    // Shut is a thin line, not nothing.
+    const float open = 1 - 0.92f * look.blink;
 
-    Eye eye;
-    eye.y = screen_height / 2;
-    eye.width = base_width * mood.width;
-    eye.height = base_height * mood.height;
-    eye.radius = eye.width * mood.radius;
-    eye.lid_top = eye.height * mood.lid_top;
-    eye.lid_bottom = eye.height * mood.lid_bottom;
-    // smile 1: a bottom lid about as round as the eye is wide
-    eye.lid_curve = mood.smile / (0.6f * eye.width);
-
+    auto make_eye = [&](float x, float size, float lid_angle) {
+        Eye eye;
+        eye.x = x + look.gaze.x * reach_x;
+        eye.y = screen_height / 2 + look.gaze.y * reach_y;
+        eye.width = base_width * mood.width * size;
+        eye.height = base_height * mood.height * size * open;
+        eye.radius = eye.width * mood.radius;
+        eye.lid_top = eye.height * mood.lid_top;
+        eye.lid_angle = lid_angle;
+        eye.lid_bottom = eye.height * mood.lid_bottom;
+        // smile 1: a bottom lid about as round as the eye is wide
+        eye.lid_curve = mood.smile / (0.6f * eye.width);
+        return eye;
+    };
     // The lid angle is towards the nose for both eyes: mirrored on screen.
-    Face face;
-    face.left = eye;
-    face.left.x = screen_width / 2 - spacing;
-    face.left.lid_angle = mood.lid_angle;
-    face.right = eye;
-    face.right.x = screen_width / 2 + spacing;
-    face.right.lid_angle = -mood.lid_angle;
-    return face;
+    return {make_eye(screen_width / 2 - spacing, 1 - turn, mood.lid_angle),
+            make_eye(screen_width / 2 + spacing, 1 + turn, -mood.lid_angle)};
 }
 
 } // namespace dontfall::face

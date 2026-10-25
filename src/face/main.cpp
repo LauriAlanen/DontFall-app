@@ -3,8 +3,9 @@
 //
 // SDL2 opens the panel fullscreen through DRM/KMS with an OpenGL ES 2.0
 // context (ST's gcnano driver); there is no compositor, this program owns
-// the screen. Each frame the face model's numbers go to the eye shader,
-// and the swap waits for vsync, which paces the loop.
+// the screen. Each frame the face model's numbers (the mood, plus the idle
+// blinks and glances on top) go to the eye shader, and the swap waits for
+// vsync, which paces the loop.
 //
 // --demo steps through the mood table, to see and tune every mood
 // (temporary, face plan step 3).
@@ -19,6 +20,7 @@
 #include <SDL.h>
 
 #include "face.hpp"
+#include "idle.hpp"
 #include "mood.hpp"
 #include "renderer.hpp"
 #include "tween.hpp"
@@ -30,8 +32,7 @@
 namespace {
 
 using namespace std::chrono_literals;
-using dontfall::face::MoodTween;
-using Clock = MoodTween::Clock;
+using dontfall::face::Clock;
 
 // --demo: time on each mood, and how long the change to the next takes
 constexpr auto demo_hold = 2s;
@@ -101,7 +102,8 @@ int main(int argc, char **argv)
         dontfall::face::Renderer renderer;
         std::string error;
         if (renderer.init(panel_width, panel_height, rotation, error)) {
-            MoodTween tween(dontfall::face::neutral);
+            dontfall::face::Tween<dontfall::face::Mood> mood(dontfall::face::neutral);
+            dontfall::face::Idle idle(Clock::now());
             size_t demo_mood = 0;
             auto next_mood = Clock::now() + demo_hold;
             for (bool running = true; running;) {
@@ -116,11 +118,11 @@ int main(int argc, char **argv)
                     const auto &next = dontfall::face::moods[demo_mood];
                     std::printf("mood %.*s\n", static_cast<int>(next.name.size()),
                                 next.name.data());
-                    tween.go(next.mood, demo_change, now);
+                    mood.go(next.mood, demo_change, now);
                     next_mood = now + demo_hold;
                 }
                 renderer.draw(dontfall::face::make_face(renderer.width(), renderer.height(),
-                                                        tween.at(now)));
+                                                        mood.at(now), idle.at(now)));
                 SDL_GL_SwapWindow(window);
             }
         } else {

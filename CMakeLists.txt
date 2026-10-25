@@ -19,6 +19,7 @@ target_compile_definitions(dontfall-app PRIVATE APP_VERSION="${PROJECT_VERSION}"
 
 # The robot's eyes on the DSI panel: SDL2 (KMS/DRM) + OpenGL ES 2.0.
 add_executable(dontfall-face
+    src/face/idle.cpp
     src/face/main.cpp
     src/face/renderer.cpp
 )
