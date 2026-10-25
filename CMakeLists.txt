@@ -3,6 +3,7 @@ project(dontfall-app VERSION 0.3.0 LANGUAGES CXX)
 
 find_package(rclcpp REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(SDL2 REQUIRED)
 # OpenGL ES 2.0 (ST's gcnano on the board); the headers come with SDL2
 find_library(GLESV2_LIBRARY GLESv2 REQUIRED)
@@ -17,13 +18,17 @@ target_compile_features(dontfall-app PRIVATE cxx_std_17)
 target_compile_options(dontfall-app PRIVATE -Wall -Wextra)
 target_compile_definitions(dontfall-app PRIVATE APP_VERSION="${PROJECT_VERSION}")
 
-# The robot's eyes on the DSI panel: SDL2 (KMS/DRM) + OpenGL ES 2.0.
+# The robot's eyes on the DSI panel: SDL2 (KMS/DRM) + OpenGL ES 2.0, and
+# the ROS 2 node dontfall_face (the M4's IMU drives the googly eyes).
 add_executable(dontfall-face
+    src/face/googly.cpp
     src/face/idle.cpp
+    src/face/imu_listener.cpp
     src/face/main.cpp
     src/face/renderer.cpp
 )
-target_link_libraries(dontfall-face PRIVATE SDL2::SDL2 ${GLESV2_LIBRARY})
+target_link_libraries(dontfall-face PRIVATE SDL2::SDL2 ${GLESV2_LIBRARY}
+    rclcpp::rclcpp ${sensor_msgs_TARGETS})
 target_compile_features(dontfall-face PRIVATE cxx_std_17)
 target_compile_options(dontfall-face PRIVATE -Wall -Wextra)
 target_compile_definitions(dontfall-face PRIVATE APP_VERSION="${PROJECT_VERSION}")

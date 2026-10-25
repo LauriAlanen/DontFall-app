@@ -44,7 +44,9 @@ inline Gaze mix(const Gaze &a, const Gaze &b, float t)
 // What changes from moment to moment on top of the mood.
 struct Look {
     Gaze gaze;
-    float blink = 0;  // 0 open .. 1 shut
+    float blink = 0;      // 0 open .. 1 shut
+    float squash_x = 0;   // 0..1, squeezed sideways / up and down (googly
+    float squash_y = 0;   //   eyes hitting their edge)
 };
 
 // The eyes for a mood and a look on a screen of the given logical size.
@@ -55,20 +57,24 @@ inline Face make_face(float screen_width, float screen_height, const Mood &mood,
     const float base_width = screen_width * 0.22f;
     const float base_height = screen_height * 0.45f;
     const float spacing = screen_width * 0.22f;  // eye centre to screen centre
-    const float reach_x = screen_width * 0.12f;
-    const float reach_y = screen_height * 0.10f;
+    const float reach_x = screen_width * 0.15f;
+    const float reach_y = screen_height * 0.24f;
     // Looking to one side, the eye on that side grows and the other shrinks
     // a little: a hint of the head turning.
     const float turn = 0.08f * look.gaze.x;
     // Shut is a thin line, not nothing.
     const float open = 1 - 0.92f * look.blink;
+    // A full squash takes this much off the size along the hit.
+    constexpr float squash_depth = 0.25f;
+    const float squeeze_x = 1 - squash_depth * look.squash_x;
+    const float squeeze_y = 1 - squash_depth * look.squash_y;
 
     auto make_eye = [&](float x, float size, float lid_angle) {
         Eye eye;
         eye.x = x + look.gaze.x * reach_x;
         eye.y = screen_height / 2 + look.gaze.y * reach_y;
-        eye.width = base_width * mood.width * size;
-        eye.height = base_height * mood.height * size * open;
+        eye.width = base_width * mood.width * size * squeeze_x;
+        eye.height = base_height * mood.height * size * open * squeeze_y;
         eye.radius = eye.width * mood.radius;
         eye.lid_top = eye.height * mood.lid_top;
         eye.lid_angle = lid_angle;

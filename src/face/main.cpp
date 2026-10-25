@@ -3,9 +3,13 @@
 //
 // SDL2 opens the panel fullscreen through DRM/KMS with an OpenGL ES 2.0
 // context (ST's gcnano driver); there is no compositor, this program owns
-// the screen. Each frame the face model's numbers (the mood, plus the idle
-// blinks and glances on top) go to the eye shader, and the swap waits for
-// vsync, which paces the loop.
+// the screen. Each frame the face model's numbers (the mood, the idle
+// blinks and glances, and the googly physics driven by the IMU) go to the
+// eye shader, and the swap waits for vsync, which paces the loop.
+//
+// It is also the ROS 2 node dontfall_face: it subscribes to the M4's IMU
+// (/dontfall_m4/imu). The node spins in its own thread; the render loop
+// only reads the latest sample (imu_listener.hpp).
 //
 // --demo steps through the mood table, to see and tune every mood
 // (temporary, face plan step 3); --mood <name> holds one of them.
@@ -13,18 +17,22 @@
 // GPU's drawing time per frame (it waits for the GPU with glFinish() each
 // frame to measure it, which itself slows the loop down a little).
 //
-// Runs until SIGTERM/SIGINT (SDL turns both into SDL_QUIT).
+// Runs until SIGTERM/SIGINT (SDL turns both into SDL_QUIT; rclcpp's own
+// signal handlers are off, the render loop shuts ROS down).
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <vector>
 
 #include <SDL.h>
 
 #include "face.hpp"
+#include "googly.hpp"
 #include "idle.hpp"
+#include "imu_listener.hpp"
 #include "mood.hpp"
 #include "renderer.hpp"
 #include "tween.hpp"
@@ -43,6 +51,12 @@ constexpr auto demo_hold = 2s;
 constexpr auto demo_change = 400ms;
 // --stats: how often to print the frame rate
 constexpr auto stats_period = 5s;
+// IMU samples older than this count as no IMU (they come at 50 Hz).
+constexpr auto imu_max_age = 500ms;
+// Idle mood changes take this long; a hit against the edge at least this
+// hard (0..1) is a bump that surprises the face.
+constexpr auto mood_change_time = 400ms;
+constexpr float bump_hit = 0.6f;
 
 // How the logical screen is turned on the portrait 480x800 panel. 90 =
 // landscape; the real value comes with the robot (face plan, open questions).
@@ -70,26 +84,30 @@ int main(int argc, char **argv)
     std::setvbuf(stdout, nullptr, _IOLBF, 0);
     std::printf("dontfall-face %s\n", APP_VERSION);
 
+    rclcpp::init(argc, argv, rclcpp::InitOptions(), rclcpp::SignalHandlerOptions::None);
+    // our own arguments, without the --ros-args part
+    const std::vector<std::string> args = rclcpp::remove_ros_arguments(argc, argv);
+
     int rotation = default_rotation;
     bool demo = false;
     const dontfall::face::Mood *fixed_mood = nullptr;
     bool stats = false;
     bool gpu_time = false;
-    for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--rotation") == 0 && i + 1 < argc)
-            rotation = std::atoi(argv[++i]);
-        else if (std::strcmp(argv[i], "--demo") == 0)
+    for (size_t i = 1; i < args.size(); ++i) {
+        if (args[i] == "--rotation" && i + 1 < args.size())
+            rotation = std::atoi(args[++i].c_str());
+        else if (args[i] == "--demo")
             demo = true;
-        else if (std::strcmp(argv[i], "--mood") == 0 && i + 1 < argc) {
-            const std::string_view name = argv[++i];
+        else if (args[i] == "--mood" && i + 1 < args.size()) {
+            const std::string_view name = args[++i];
             for (const auto &m : dontfall::face::moods)
                 if (m.name == name)
                     fixed_mood = &m.mood;
             if (!fixed_mood)
                 return usage();
-        } else if (std::strcmp(argv[i], "--stats") == 0)
+        } else if (args[i] == "--stats")
             stats = true;
-        else if (std::strcmp(argv[i], "--gpu-time") == 0)
+        else if (args[i] == "--gpu-time")
             gpu_time = stats = true;
         else
             return usage();
@@ -126,6 +144,10 @@ int main(int argc, char **argv)
             dontfall::face::Tween<dontfall::face::Mood> mood(
                 fixed_mood ? *fixed_mood : dontfall::face::neutral);
             dontfall::face::Idle idle(Clock::now());
+            dontfall::face::Googly googly;
+            auto imu = std::make_shared<dontfall::face::ImuListener>();
+            std::thread ros([imu] { rclcpp::spin(imu); });
+            auto last_frame = Clock::now();
             size_t demo_mood = 0;
             auto next_mood = Clock::now() + demo_hold;
             int frames = 0;
@@ -146,8 +168,31 @@ int main(int argc, char **argv)
                     mood.go(next.mood, demo_change, now);
                     next_mood = now + demo_hold;
                 }
+                // Idle life says where to look and when to blink; the googly
+                // physics moves the eyes there, pushed by the IMU.
+                float push_x = 0;
+                float push_y = 0;
+                if (const auto sample = imu->latest(now, imu_max_age))
+                    dontfall::face::imu_push(sample->ax, sample->ay, push_x, push_y);
+                auto look = idle.at(now);
+                googly.update(std::chrono::duration<float>(now - last_frame).count(), look.gaze,
+                              push_x, push_y);
+                last_frame = now;
+                look.gaze = googly.gaze();
+                look.squash_x = googly.squash_x();
+                look.squash_y = googly.squash_y();
+
+                // Passing moods and bumps, unless a mood was asked for.
+                if (!demo && !fixed_mood) {
+                    if (googly.hit() >= bump_hit)
+                        idle.bump(now);
+                    dontfall::face::Mood target;
+                    if (idle.mood_change(now, target))
+                        mood.go(target, mood_change_time, now);
+                }
+
                 renderer.draw(dontfall::face::make_face(renderer.width(), renderer.height(),
-                                                        mood.at(now), idle.at(now)));
+                                                        mood.at(now), look));
                 if (gpu_time) {
                     glFinish();  // wait for the GPU to finish this frame
                     drawing += Clock::now() - now;
@@ -167,6 +212,8 @@ int main(int argc, char **argv)
                     stats_start = now;
                 }
             }
+            rclcpp::shutdown();  // ends rclcpp::spin()
+            ros.join();
         } else {
             std::fprintf(stderr, "renderer: %s\n", error.c_str());
             status = 1;
@@ -176,5 +223,7 @@ int main(int argc, char **argv)
     SDL_GL_DeleteContext(context);
     SDL_DestroyWindow(window);
     SDL_Quit();
+    if (rclcpp::ok())
+        rclcpp::shutdown();
     return status;
 }
