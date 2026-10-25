@@ -31,20 +31,24 @@ public:
     // touches), in logical pixels.
     void panel_to_logical(float px, float py, float &x, float &y) const;
 
-    void draw(const Face &face);
+    // seconds: time since start, for the glitch's random pattern.
+    void draw(const Face &face, float seconds);
 
 private:
-    void draw_eye(const Eye &eye);
+    void draw_eye(const Eye &eye, float glitch);
 
     GLuint program_ = 0;
-    GLuint quad_ = 0;  // vertex buffer: the unit square
+    GLuint quad_ = 0;  // vertex buffer: the unit square in bands
     GLint u_rect_ = -1;
-    GLint u_shape_ = -1;
+    GLint u_center_ = -1;
+    GLint u_half_ = -1;
     GLint u_radius_ = -1;
     GLint u_top_ = -1;
     GLint u_bottom_ = -1;
     GLint u_lids_ = -1;
     GLint u_color_ = -1;
+    GLint u_style_ = -1;
+    GLint u_glitch_ = -1;
     float width_ = 0;
     float height_ = 0;
     float panel_width_ = 0;

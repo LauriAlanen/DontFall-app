@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include "eye_shader.hpp"
 
@@ -16,6 +17,20 @@ namespace {
 // frames (face plan step 3).
 constexpr float glow_width = 12;
 constexpr float glow_strength = 0.45f;
+
+// Inside the eye: how wide the bright rim along the edge is (logical
+// pixels) and how dark the scanlines are (0 = none).
+constexpr float rim_width = 14;
+// Scanlines (fract/step per pixel) cost ~3 ms per frame: left out, the
+// rim and shading cost ~1.5 ms.
+constexpr float scanline_depth = 0;
+
+// The glitch (fault look): bands per eye, how far a band jumps at full
+// glitch (logical pixels) and how often the pattern changes (per second).
+// Bands are only drawn while glitching: their edges cost the GPU ~1 ms.
+constexpr int bands = 16;
+constexpr float glitch_jump = 26;
+constexpr float glitch_rate = 12;
 
 // A bottom lid with no curve is a circle so big its edge is straight.
 constexpr float min_lid_curve = 1e-4f;
@@ -110,27 +125,47 @@ bool Renderer::init(int panel_width, int panel_height, int rotation, std::string
 
     glUseProgram(program_);
     u_rect_ = glGetUniformLocation(program_, "u_rect");
-    u_shape_ = glGetUniformLocation(program_, "u_shape");
+    u_center_ = glGetUniformLocation(program_, "u_center");
+    u_half_ = glGetUniformLocation(program_, "u_half");
     u_radius_ = glGetUniformLocation(program_, "u_radius");
     u_top_ = glGetUniformLocation(program_, "u_top");
     u_bottom_ = glGetUniformLocation(program_, "u_bottom");
     u_lids_ = glGetUniformLocation(program_, "u_lids");
     u_color_ = glGetUniformLocation(program_, "u_color");
+    u_style_ = glGetUniformLocation(program_, "u_style");
+    u_glitch_ = glGetUniformLocation(program_, "u_glitch");
     // These never change while running.
     glUniform2fv(glGetUniformLocation(program_, "u_row0"), 1, t.row0);
     glUniform2fv(glGetUniformLocation(program_, "u_row1"), 1, t.row1);
     glUniform2fv(glGetUniformLocation(program_, "u_offset"), 1, t.offset);
     glUniform2f(glGetUniformLocation(program_, "u_panel"), w, h);
-    glUniform2f(glGetUniformLocation(program_, "u_glow"), glow_width, glow_strength);
+    glUniform2f(glGetUniformLocation(program_, "u_glow"), 1 / glow_width, glow_strength);
 
-    // The unit square as a triangle strip; u_rect places it.
-    const GLfloat corners[] = {0, 0, 1, 0, 0, 1, 1, 1};
+    // The unit square, two triangles, once whole and then as horizontal
+    // bands, every band with its own corners so it can move on its own;
+    // u_rect places it. Per vertex: x, y, band.
+    std::vector<GLfloat> vertices;
+    auto add_band = [&vertices](float y0, float y1, float band) {
+        for (const float v : {0.0f, y0, band, 1.0f, y0, band, 0.0f, y1, band,  //
+                              1.0f, y0, band, 1.0f, y1, band, 0.0f, y1, band})
+            vertices.push_back(v);
+    };
+    add_band(0, 1, 0);
+    for (int b = 0; b < bands; ++b)
+        add_band(static_cast<float>(b) / bands, static_cast<float>(b + 1) / bands,
+                 static_cast<float>(b));
     const GLint a_corner = glGetAttribLocation(program_, "a_corner");
+    const GLint a_band = glGetAttribLocation(program_, "a_band");
     glGenBuffers(1, &quad_);
     glBindBuffer(GL_ARRAY_BUFFER, quad_);
-    glBufferData(GL_ARRAY_BUFFER, sizeof corners, corners, GL_STATIC_DRAW);
-    glVertexAttribPointer(a_corner, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(),
+                 GL_STATIC_DRAW);
+    constexpr GLsizei stride = 3 * sizeof(GLfloat);
+    glVertexAttribPointer(a_corner, 2, GL_FLOAT, GL_FALSE, stride, nullptr);
     glEnableVertexAttribArray(a_corner);
+    glVertexAttribPointer(a_band, 1, GL_FLOAT, GL_FALSE, stride,
+                          reinterpret_cast<const void *>(2 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(a_band);
 
     glViewport(0, 0, panel_width, panel_height);
     glClearColor(0, 0, 0, 1);
@@ -145,43 +180,53 @@ void Renderer::panel_to_logical(float px, float py, float &x, float &y) const
     y = row1_[0] * bx + row1_[1] * by + offset_[1];
 }
 
-void Renderer::draw(const Face &face)
+void Renderer::draw(const Face &face, float seconds)
 {
     glClear(GL_COLOR_BUFFER_BIT);
     glUniform3f(u_color_, face.color.r, face.color.g, face.color.b);
-    draw_eye(face.left);
-    draw_eye(face.right);
+    const float glitch = face.glitch * glitch_jump;
+    glUniform2f(u_glitch_, glitch, std::floor(seconds * glitch_rate));
+    draw_eye(face.left, glitch);
+    draw_eye(face.right, glitch);
 }
 
-void Renderer::draw_eye(const Eye &eye)
+void Renderer::draw_eye(const Eye &eye, float glitch)
 {
     const float half_width = eye.width / 2;
     const float half_height = eye.height / 2;
 
-    // Just the eye and its glow; the lids only ever cut inside the eye.
+    // Just the eye and its glow (and room for bands to jump sideways); the
+    // lids only ever cut inside the eye.
     const float margin = glow_width + 1;
-    glUniform4f(u_rect_, eye.x - half_width - margin, eye.y - half_height - margin,
-                eye.x + half_width + margin, eye.y + half_height + margin);
-    glUniform4f(u_shape_, eye.x, eye.y, half_width, half_height);
-    glUniform1f(u_radius_, eye.radius);
+    const float margin_x = margin + glitch;
+    glUniform4f(u_rect_, eye.x - half_width - margin_x, eye.y - half_height - margin,
+                eye.x + half_width + margin_x, eye.y + half_height + margin);
+    // The shader works relative to the eye's centre.
+    glUniform2f(u_center_, eye.x, eye.y);
+    glUniform2f(u_half_, half_width, half_height);
+    glUniform1f(u_radius_, std::fmin(eye.radius, std::fmin(half_width, half_height)));
+    glUniform3f(u_style_, 1 / rim_width, 1 / std::fmax(half_height, 1.0f), scanline_depth);
 
     // Top lid: a line through the point lid_top below the eye's top edge,
     // tilted by lid_angle. Its normal points up (y is down), to the cut side.
     const float nx = std::sin(eye.lid_angle);
     const float ny = -std::cos(eye.lid_angle);
-    const float top_y = eye.y - half_height + eye.lid_top;
-    glUniform3f(u_top_, nx, ny, nx * eye.x + ny * top_y);
+    const float top_y = -half_height + eye.lid_top;
+    glUniform3f(u_top_, nx, ny, ny * top_y);
 
     // Bottom lid: a circle whose top is lid_bottom above the eye's bottom edge.
     const float r = 1 / std::fmax(eye.lid_curve, min_lid_curve);
-    glUniform3f(u_bottom_, eye.x, eye.y + half_height - eye.lid_bottom + r, r);
+    glUniform3f(u_bottom_, 0, half_height - eye.lid_bottom + r, r);
 
     // A lid that cuts less than this many pixels isn't drawn at all.
     constexpr float unused = 0.5f;
     const bool top = eye.lid_top > unused || std::fabs(eye.lid_angle) * half_width > unused;
     glUniform2f(u_lids_, top ? 1 : 0, eye.lid_bottom > unused ? 1 : 0);
 
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    if (glitch > 0)
+        glDrawArrays(GL_TRIANGLES, 6, bands * 6);  // the bands
+    else
+        glDrawArrays(GL_TRIANGLES, 0, 6);  // the whole square
 }
 
 } // namespace dontfall::face

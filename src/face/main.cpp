@@ -157,7 +157,8 @@ int main(int argc, char **argv)
             dontfall::face::MoodPicker picker(Clock::now());
             auto node = std::make_shared<dontfall::face::FaceNode>();
             std::thread ros([node] { rclcpp::spin(node); });
-            auto last_frame = Clock::now();
+            const auto start = Clock::now();
+            auto last_frame = start;
             dontfall::face::Face face;  // as last drawn, for touches
             bool finger_down = false;
             bool long_pressed = false;
@@ -239,7 +240,7 @@ int main(int argc, char **argv)
 
                 face = dontfall::face::make_face(renderer.width(), renderer.height(), mood.at(now),
                                                  look);
-                renderer.draw(face);
+                renderer.draw(face, std::chrono::duration<float>(now - start).count());
                 if (gpu_time) {
                     glFinish();  // wait for the GPU to finish this frame
                     drawing += Clock::now() - now;

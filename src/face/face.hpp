@@ -28,6 +28,7 @@ struct Face {
     Eye left;
     Eye right;
     Color color;
+    float glitch = 0;  // 0..1, see Mood
 };
 
 // Where the eyes look: -1..1 from the middle, + = right and down.
@@ -105,7 +106,8 @@ inline Face make_face(float screen_width, float screen_height, const Mood &mood,
     };
     // The lid angle is towards the nose for both eyes: mirrored on screen.
     return {make_eye(screen_width / 2 - spacing, 1 - turn, mood.lid_angle),
-            make_eye(screen_width / 2 + spacing, 1 + turn, -mood.lid_angle), mood.color};
+            make_eye(screen_width / 2 + spacing, 1 + turn, -mood.lid_angle), mood.color,
+            mood.glitch};
 }
 
 } // namespace dontfall::face
