@@ -8,8 +8,9 @@
 // eye shader, and the swap waits for vsync, which paces the loop.
 //
 // It is also the ROS 2 node dontfall_face: it subscribes to the M4's IMU
-// (/dontfall_m4/imu). The node spins in its own thread; the render loop
-// only reads the latest sample (imu_listener.hpp).
+// (/dontfall_m4/imu) and statuses (/diagnostics); the robot's state picks
+// the mood (mood_picker.hpp). The node spins in its own thread; the render
+// loop only reads the latest values (face_node.hpp).
 //
 // --demo steps through the mood table, to see and tune every mood
 // (temporary, face plan step 3); --mood <name> holds one of them.
@@ -30,10 +31,12 @@
 #include <SDL.h>
 
 #include "face.hpp"
+#include "face_node.hpp"
 #include "googly.hpp"
 #include "idle.hpp"
-#include "imu_listener.hpp"
 #include "mood.hpp"
+#include "mood_picker.hpp"
+#include "robot_state.hpp"
 #include "renderer.hpp"
 #include "tween.hpp"
 
@@ -53,9 +56,8 @@ constexpr auto demo_change = 400ms;
 constexpr auto stats_period = 5s;
 // IMU samples older than this count as no IMU (they come at 50 Hz).
 constexpr auto imu_max_age = 500ms;
-// Idle mood changes take this long; a hit against the edge at least this
-// hard (0..1) is a bump that surprises the face.
-constexpr auto mood_change_time = 400ms;
+// A hit of the googly eyes against their edge at least this hard (0..1) is
+// a knock that surprises the face.
 constexpr float bump_hit = 0.6f;
 
 // How the logical screen is turned on the portrait 480x800 panel. 90 =
@@ -145,8 +147,9 @@ int main(int argc, char **argv)
                 fixed_mood ? *fixed_mood : dontfall::face::neutral);
             dontfall::face::Idle idle(Clock::now());
             dontfall::face::Googly googly;
-            auto imu = std::make_shared<dontfall::face::ImuListener>();
-            std::thread ros([imu] { rclcpp::spin(imu); });
+            dontfall::face::MoodPicker picker(Clock::now());
+            auto node = std::make_shared<dontfall::face::FaceNode>();
+            std::thread ros([node] { rclcpp::spin(node); });
             auto last_frame = Clock::now();
             size_t demo_mood = 0;
             auto next_mood = Clock::now() + demo_hold;
@@ -172,7 +175,8 @@ int main(int argc, char **argv)
                 // physics moves the eyes there, pushed by the IMU.
                 float push_x = 0;
                 float push_y = 0;
-                if (const auto sample = imu->latest(now, imu_max_age))
+                const auto sample = node->imu();
+                if (sample && now - sample->received <= imu_max_age)
                     dontfall::face::imu_push(sample->ax, sample->ay, push_x, push_y);
                 auto look = idle.at(now);
                 googly.update(std::chrono::duration<float>(now - last_frame).count(), look.gaze,
@@ -182,13 +186,20 @@ int main(int argc, char **argv)
                 look.squash_x = googly.squash_x();
                 look.squash_y = googly.squash_y();
 
-                // Passing moods and bumps, unless a mood was asked for.
+                // The robot's state picks the mood, unless one was asked for.
                 if (!demo && !fixed_mood) {
-                    if (googly.hit() >= bump_hit)
-                        idle.bump(now);
-                    dontfall::face::Mood target;
-                    if (idle.mood_change(now, target))
-                        mood.go(target, mood_change_time, now);
+                    const auto status = node->m4_status();
+                    const auto state = dontfall::face::robot_state(
+                        now, sample ? &sample->received : nullptr, status ? &*status : nullptr);
+                    dontfall::face::MoodChoice choice;
+                    if (picker.pick(now, state, googly.hit() >= bump_hit, choice)) {
+                        const auto name = dontfall::face::mood_name(choice.mood);
+                        const bool fault = state == dontfall::face::RobotState::fault;
+                        std::printf("mood %.*s (%s%s%s)\n", static_cast<int>(name.size()),
+                                    name.data(), dontfall::face::to_string(state),
+                                    fault ? ": " : "", fault ? status->fault_text.c_str() : "");
+                        mood.go(*choice.mood, choice.change, now);
+                    }
                 }
 
                 renderer.draw(dontfall::face::make_face(renderer.width(), renderer.height(),

@@ -19,16 +19,18 @@ target_compile_options(dontfall-app PRIVATE -Wall -Wextra)
 target_compile_definitions(dontfall-app PRIVATE APP_VERSION="${PROJECT_VERSION}")
 
 # The robot's eyes on the DSI panel: SDL2 (KMS/DRM) + OpenGL ES 2.0, and
-# the ROS 2 node dontfall_face (the M4's IMU drives the googly eyes).
+# the ROS 2 node dontfall_face (the M4's IMU drives the googly eyes, its
+# statuses the mood).
 add_executable(dontfall-face
+    src/face/face_node.cpp
     src/face/googly.cpp
     src/face/idle.cpp
-    src/face/imu_listener.cpp
     src/face/main.cpp
+    src/face/mood_picker.cpp
     src/face/renderer.cpp
 )
 target_link_libraries(dontfall-face PRIVATE SDL2::SDL2 ${GLESV2_LIBRARY}
-    rclcpp::rclcpp ${sensor_msgs_TARGETS})
+    rclcpp::rclcpp ${sensor_msgs_TARGETS} ${diagnostic_msgs_TARGETS})
 target_compile_features(dontfall-face PRIVATE cxx_std_17)
 target_compile_options(dontfall-face PRIVATE -Wall -Wextra)
 target_compile_definitions(dontfall-face PRIVATE APP_VERSION="${PROJECT_VERSION}")

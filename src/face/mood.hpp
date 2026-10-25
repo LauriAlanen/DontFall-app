@@ -46,15 +46,35 @@ struct NamedMood {
 
 // The mood table. Tune the numbers here. Columns: width, height, radius,
 // lid_top, lid_angle, lid_bottom, smile, colour.
-inline constexpr std::array<NamedMood, 6> moods = {{
+inline constexpr std::array<NamedMood, 8> moods = {{
     {"neutral", {}},
     {"happy", {1.05f, 1.0f, 0.3f, 0, 0, 0.45f, 1, {1.0f, 0.8f, 0.2f}}},          // warm yellow
     {"sad", {1.0f, 0.9f, 0.25f, 0.3f, -0.35f, 0, 0, {0.25f, 0.4f, 1.0f}}},      // deep blue
     {"angry", {1.0f, 0.9f, 0.2f, 0.35f, 0.4f, 0, 0, {1.0f, 0.2f, 0.1f}}},       // red
     {"surprised", {1.15f, 1.2f, 0.5f, 0, 0, 0, 0, {0.75f, 0.95f, 1.0f}}},       // pale, bright
     {"sleepy", {1.0f, 1.0f, 0.25f, 0.55f, -0.1f, 0.1f, 0, {0.1f, 0.45f, 0.55f}}},  // dim
+    {"focused", {1.0f, 0.85f, 0.2f, 0.15f, 0.12f, 0.05f, 0, {0.2f, 1.0f, 0.7f}}},  // green-cyan
+    {"asleep", {1.05f, 1.0f, 0.25f, 0.9f, 0, 0.05f, 0, {0.05f, 0.25f, 0.3f}}},     // nearly shut, dark
 }};
 
 inline constexpr Mood neutral = moods[0].mood;
+
+// The mood called name, neutral if there is none.
+inline const Mood &mood_named(std::string_view name)
+{
+    for (const auto &m : moods)
+        if (m.name == name)
+            return m.mood;
+    return moods[0].mood;
+}
+
+// The name of a mood from the table, "?" for any other.
+inline std::string_view mood_name(const Mood *mood)
+{
+    for (const auto &m : moods)
+        if (&m.mood == mood)
+            return m.name;
+    return "?";
+}
 
 } // namespace dontfall::face
