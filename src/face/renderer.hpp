@@ -32,8 +32,15 @@ private:
     GLuint program_ = 0;
     GLuint quad_ = 0;  // vertex buffer
     GLint a_pos_ = -1;
-    GLint u_left_ = -1;
-    GLint u_right_ = -1;
+    struct EyeUniforms {
+        GLint shape = -1;
+        GLint top = -1;
+        GLint bottom = -1;
+    };
+    void set_eye(const EyeUniforms &u, const Eye &eye);
+
+    EyeUniforms left_;
+    EyeUniforms right_;
     GLint u_radius_ = -1;
     float width_ = 0;
     float height_ = 0;

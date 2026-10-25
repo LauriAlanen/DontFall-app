@@ -1,5 +1,7 @@
 #include "renderer.hpp"
 
+#include <cmath>
+
 #include "eye_shader.hpp"
 
 namespace dontfall::face {
@@ -46,12 +48,27 @@ bool transform_for(int rotation, float w, float h, Transform &t)
     }
 }
 
-void set_eye(GLint location, const Eye &eye)
-{
-    glUniform4f(location, eye.x, eye.y, eye.width / 2, eye.height / 2);
-}
+// A bottom lid with no curve is a circle so big its edge is straight.
+constexpr float min_lid_curve = 1e-4f;
 
 } // namespace
+
+void Renderer::set_eye(const EyeUniforms &u, const Eye &eye)
+{
+    const float half_height = eye.height / 2;
+    glUniform4f(u.shape, eye.x, eye.y, eye.width / 2, half_height);
+
+    // Top lid: a line through the point lid_top below the eye's top edge,
+    // tilted by lid_angle. Its normal points up (y is down), to the cut side.
+    const float nx = std::sin(eye.lid_angle);
+    const float ny = -std::cos(eye.lid_angle);
+    const float top_y = eye.y - half_height + eye.lid_top;
+    glUniform3f(u.top, nx, ny, nx * eye.x + ny * top_y);
+
+    // Bottom lid: a circle whose top is lid_bottom above the eye's bottom edge.
+    const float r = 1 / std::fmax(eye.lid_curve, min_lid_curve);
+    glUniform3f(u.bottom, eye.x, eye.y + half_height - eye.lid_bottom + r, r);
+}
 
 Renderer::~Renderer()
 {
@@ -99,8 +116,11 @@ bool Renderer::init(int panel_width, int panel_height, int rotation, std::string
 
     glUseProgram(program_);
     a_pos_ = glGetAttribLocation(program_, "a_pos");
-    u_left_ = glGetUniformLocation(program_, "u_left");
-    u_right_ = glGetUniformLocation(program_, "u_right");
+    left_ = {glGetUniformLocation(program_, "u_left"), glGetUniformLocation(program_, "u_left_top"),
+             glGetUniformLocation(program_, "u_left_bottom")};
+    right_ = {glGetUniformLocation(program_, "u_right"),
+              glGetUniformLocation(program_, "u_right_top"),
+              glGetUniformLocation(program_, "u_right_bottom")};
     u_radius_ = glGetUniformLocation(program_, "u_radius");
     // These never change while running.
     glUniform2fv(glGetUniformLocation(program_, "u_row0"), 1, t.row0);
@@ -122,8 +142,8 @@ bool Renderer::init(int panel_width, int panel_height, int rotation, std::string
 
 void Renderer::draw(const Face &face)
 {
-    set_eye(u_left_, face.left);
-    set_eye(u_right_, face.right);
+    set_eye(left_, face.left);
+    set_eye(right_, face.right);
     glUniform2f(u_radius_, face.left.radius, face.right.radius);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }

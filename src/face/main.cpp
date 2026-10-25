@@ -6,7 +6,11 @@
 // the screen. Each frame the face model's numbers go to the eye shader,
 // and the swap waits for vsync, which paces the loop.
 //
+// --demo steps through the mood table, to see and tune every mood
+// (temporary, face plan step 3).
+//
 // Runs until SIGTERM/SIGINT (SDL turns both into SDL_QUIT).
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -15,7 +19,9 @@
 #include <SDL.h>
 
 #include "face.hpp"
+#include "mood.hpp"
 #include "renderer.hpp"
+#include "tween.hpp"
 
 #ifndef APP_VERSION
 #define APP_VERSION "dev"
@@ -23,13 +29,21 @@
 
 namespace {
 
+using namespace std::chrono_literals;
+using dontfall::face::MoodTween;
+using Clock = MoodTween::Clock;
+
+// --demo: time on each mood, and how long the change to the next takes
+constexpr auto demo_hold = 2s;
+constexpr auto demo_change = 400ms;
+
 // How the logical screen is turned on the portrait 480x800 panel. 90 =
 // landscape; the real value comes with the robot (face plan, open questions).
 constexpr int default_rotation = 90;
 
 int usage()
 {
-    std::fprintf(stderr, "usage: dontfall-face [--rotation 0|90|180|270]\n");
+    std::fprintf(stderr, "usage: dontfall-face [--rotation 0|90|180|270] [--demo]\n");
     return 1;
 }
 
@@ -49,9 +63,12 @@ int main(int argc, char **argv)
     std::printf("dontfall-face %s\n", APP_VERSION);
 
     int rotation = default_rotation;
+    bool demo = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--rotation") == 0 && i + 1 < argc)
             rotation = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--demo") == 0)
+            demo = true;
         else
             return usage();
     }
@@ -84,13 +101,26 @@ int main(int argc, char **argv)
         dontfall::face::Renderer renderer;
         std::string error;
         if (renderer.init(panel_width, panel_height, rotation, error)) {
-            const auto face = dontfall::face::neutral_face(renderer.width(), renderer.height());
+            MoodTween tween(dontfall::face::neutral);
+            size_t demo_mood = 0;
+            auto next_mood = Clock::now() + demo_hold;
             for (bool running = true; running;) {
                 SDL_Event event;
                 while (SDL_PollEvent(&event))
                     if (event.type == SDL_QUIT)
                         running = false;
-                renderer.draw(face);
+
+                const auto now = Clock::now();
+                if (demo && now >= next_mood) {
+                    demo_mood = (demo_mood + 1) % dontfall::face::moods.size();
+                    const auto &next = dontfall::face::moods[demo_mood];
+                    std::printf("mood %.*s\n", static_cast<int>(next.name.size()),
+                                next.name.data());
+                    tween.go(next.mood, demo_change, now);
+                    next_mood = now + demo_hold;
+                }
+                renderer.draw(dontfall::face::make_face(renderer.width(), renderer.height(),
+                                                        tween.at(now)));
                 SDL_GL_SwapWindow(window);
             }
         } else {
