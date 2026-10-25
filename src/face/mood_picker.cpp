@@ -16,6 +16,7 @@ constexpr auto asleep_after = 10s;
 // Surprise when armed, and after a knock.
 constexpr auto arm_surprise = 1200ms;
 constexpr auto bump_surprise = 1200ms;
+constexpr auto poke_squint = 1000ms;
 // Disarmed: neutral for 6-15 s, then a passing mood for 2-4 s.
 constexpr float neutral_min_s = 6, neutral_max_s = 15;
 constexpr float passing_min_s = 2, passing_max_s = 4;
@@ -82,10 +83,15 @@ bool MoodPicker::pick(Clock::time_point now, RobotState state, bool bumped, Mood
         want = &mood_named("angry");
         break;
     case RobotState::armed:
-        want = now < surprised_until_ ? &mood_named("surprised") : &mood_named("focused");
-        break;
     case RobotState::disarmed:
-        want = now < surprised_until_ ? &mood_named("surprised") : passing(now);
+        if (now < squint_until_)
+            want = &mood_named("squint");
+        else if (now < surprised_until_)
+            want = &mood_named("surprised");
+        else if (state == RobotState::armed)
+            want = &mood_named("focused");
+        else
+            want = passing(now);
         break;
     }
 
@@ -94,6 +100,11 @@ bool MoodPicker::pick(Clock::time_point now, RobotState state, bool bumped, Mood
     current_ = want;
     choice = {want, duration};
     return true;
+}
+
+void MoodPicker::poke(Clock::time_point now)
+{
+    squint_until_ = now + poke_squint;
 }
 
 } // namespace dontfall::face

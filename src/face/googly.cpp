@@ -29,12 +29,29 @@ constexpr float squash_fade = 0.12f;
 constexpr float full_squash_speed = 10;
 // Longer frames (a stall) are integrated as this, so the spring can't blow up.
 constexpr float max_dt = 0.05f;
+// Dizzy: how long, how fast round (turns per second) and how wide.
+constexpr float spin_time = 2.0f;
+constexpr float spin_turns = 1.5f;
+constexpr float spin_radius = 0.85f;
 
 } // namespace
 
-void Googly::update(float dt, const Gaze &target, float push_x, float push_y)
+void Googly::spin()
+{
+    spin_left_ = spin_time;
+    spin_phase_ = std::atan2(pos_.y, pos_.x);  // start where the eyes are
+}
+
+void Googly::update(float dt, Gaze target, float push_x, float push_y)
 {
     dt = std::clamp(dt, 0.0f, max_dt);
+
+    // Dizzy: the spring chases a point going round in a circle.
+    if (spin_left_ > 0) {
+        spin_left_ -= dt;
+        spin_phase_ += 2 * pi * spin_turns * dt;
+        target = {spin_radius * std::cos(spin_phase_), spin_radius * std::sin(spin_phase_)};
+    }
 
     const float follow = 1 - std::exp(-dt / push_smoothing);
     push_x_ += (push_x - push_x_) * follow;

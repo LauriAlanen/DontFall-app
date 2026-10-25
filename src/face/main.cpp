@@ -7,6 +7,9 @@
 // blinks and glances, and the googly physics driven by the IMU) go to the
 // eye shader, and the swap waits for vsync, which paces the loop.
 //
+// Touch: poke an eye and it squints, tap elsewhere and the eyes look there,
+// hold a finger down and they get dizzy. Touch never commands the robot.
+//
 // It is also the ROS 2 node dontfall_face: it subscribes to the M4's IMU
 // (/dontfall_m4/imu) and statuses (/diagnostics); the robot's state picks
 // the mood (mood_picker.hpp). The node spins in its own thread; the render
@@ -59,6 +62,10 @@ constexpr auto imu_max_age = 500ms;
 // A hit of the googly eyes against their edge at least this hard (0..1) is
 // a knock that surprises the face.
 constexpr float bump_hit = 0.6f;
+// Touch: a press this long is a long press; a touch this close to an eye
+// (logical pixels) pokes it.
+constexpr auto long_press = 800ms;
+constexpr float poke_margin = 30;
 
 // How the logical screen is turned on the portrait 480x800 panel. 90 =
 // landscape; the real value comes with the robot (face plan, open questions).
@@ -151,18 +158,46 @@ int main(int argc, char **argv)
             auto node = std::make_shared<dontfall::face::FaceNode>();
             std::thread ros([node] { rclcpp::spin(node); });
             auto last_frame = Clock::now();
+            dontfall::face::Face face;  // as last drawn, for touches
+            bool finger_down = false;
+            bool long_pressed = false;
+            Clock::time_point finger_since;
             size_t demo_mood = 0;
             auto next_mood = Clock::now() + demo_hold;
             int frames = 0;
             Clock::duration drawing {};
             auto stats_start = Clock::now();
             for (bool running = true; running;) {
-                SDL_Event event;
-                while (SDL_PollEvent(&event))
-                    if (event.type == SDL_QUIT)
-                        running = false;
-
                 const auto now = Clock::now();
+                SDL_Event event;
+                while (SDL_PollEvent(&event)) {
+                    if (event.type == SDL_QUIT) {
+                        running = false;
+                    } else if (event.type == SDL_FINGERDOWN && !finger_down) {
+                        finger_down = true;
+                        long_pressed = false;
+                        finger_since = now;
+                        float x = 0;
+                        float y = 0;
+                        renderer.panel_to_logical(event.tfinger.x, event.tfinger.y, x, y);
+                        if (dontfall::face::on_eye(face.left, x, y, poke_margin) ||
+                            dontfall::face::on_eye(face.right, x, y, poke_margin)) {
+                            idle.blink_now(now);
+                            picker.poke(now);
+                        } else {
+                            idle.look_at(
+                                dontfall::face::gaze_towards(renderer.width(), renderer.height(), x, y),
+                                now);
+                        }
+                    } else if (event.type == SDL_FINGERUP) {
+                        finger_down = false;
+                    }
+                }
+                if (finger_down && !long_pressed && now - finger_since >= long_press) {
+                    long_pressed = true;
+                    googly.spin();
+                }
+
                 if (demo && now >= next_mood) {
                     demo_mood = (demo_mood + 1) % dontfall::face::moods.size();
                     const auto &next = dontfall::face::moods[demo_mood];
@@ -202,8 +237,9 @@ int main(int argc, char **argv)
                     }
                 }
 
-                renderer.draw(dontfall::face::make_face(renderer.width(), renderer.height(),
-                                                        mood.at(now), look));
+                face = dontfall::face::make_face(renderer.width(), renderer.height(), mood.at(now),
+                                                 look);
+                renderer.draw(face);
                 if (gpu_time) {
                     glFinish();  // wait for the GPU to finish this frame
                     drawing += Clock::now() - now;

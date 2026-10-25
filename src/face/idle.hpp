@@ -19,6 +19,11 @@ public:
     // Where the eyes look and how far they are closed at this moment.
     Look at(Clock::time_point now);
 
+    // Blink right now (poked).
+    void blink_now(Clock::time_point now);
+    // Glance at a gaze point now and hold it a little longer (touched there).
+    void look_at(const Gaze &gaze, Clock::time_point now);
+
 private:
     float uniform(float lo, float hi) { return std::uniform_real_distribution<float>(lo, hi)(rng_); }
     Clock::duration seconds(float lo, float hi);

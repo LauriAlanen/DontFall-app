@@ -49,6 +49,26 @@ struct Look {
     float squash_y = 0;   //   eyes hitting their edge)
 };
 
+// How far the eyes move to look, as a part of the screen's size.
+inline constexpr float reach_x_part = 0.15f;
+inline constexpr float reach_y_part = 0.24f;
+
+// The gaze that moves the eyes towards a point on the screen (logical
+// pixels), as far as they reach.
+inline Gaze gaze_towards(float screen_width, float screen_height, float x, float y)
+{
+    auto limit = [](float v) { return v < -1 ? -1 : (v > 1 ? 1 : v); };
+    return {limit((x - screen_width / 2) / (screen_width * reach_x_part)),
+            limit((y - screen_height / 2) / (screen_height * reach_y_part))};
+}
+
+// True if a point (logical pixels) is on an eye, or within margin of it.
+inline bool on_eye(const Eye &eye, float x, float y, float margin)
+{
+    return x > eye.x - eye.width / 2 - margin && x < eye.x + eye.width / 2 + margin &&
+           y > eye.y - eye.height / 2 - margin && y < eye.y + eye.height / 2 + margin;
+}
+
 // The eyes for a mood and a look on a screen of the given logical size.
 inline Face make_face(float screen_width, float screen_height, const Mood &mood,
                       const Look &look = {})
@@ -57,8 +77,8 @@ inline Face make_face(float screen_width, float screen_height, const Mood &mood,
     const float base_width = screen_width * 0.22f;
     const float base_height = screen_height * 0.45f;
     const float spacing = screen_width * 0.22f;  // eye centre to screen centre
-    const float reach_x = screen_width * 0.15f;
-    const float reach_y = screen_height * 0.24f;
+    const float reach_x = screen_width * reach_x_part;
+    const float reach_y = screen_height * reach_y_part;
     // Looking to one side, the eye on that side grows and the other shrinks
     // a little: a hint of the head turning.
     const float turn = 0.08f * look.gaze.x;

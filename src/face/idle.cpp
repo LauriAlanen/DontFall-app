@@ -19,6 +19,8 @@ constexpr float double_blink_chance = 0.2f;
 // Glances: a saccade is a quick jump, real eyes do it in tens of ms.
 constexpr auto saccade = 90ms;
 constexpr float back_to_middle_chance = 0.4f;
+// Looking at a touch holds this long before the glances go on.
+constexpr auto look_at_hold = 2s;
 
 float ms(Clock::duration d)
 {
@@ -78,6 +80,19 @@ Look Idle::at(Clock::time_point now)
         next_glance_ = now + seconds(1, 4);
     }
     return {gaze_.at(now), blink_amount(now)};
+}
+
+void Idle::blink_now(Clock::time_point now)
+{
+    blink_start_ = now;
+    double_blink_ = false;
+    next_blink_ = now + seconds(2, 6);
+}
+
+void Idle::look_at(const Gaze &gaze, Clock::time_point now)
+{
+    gaze_.go(gaze, saccade, now);
+    next_glance_ = now + look_at_hold;
 }
 
 } // namespace dontfall::face

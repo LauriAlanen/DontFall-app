@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 #include "eye_shader.hpp"
@@ -78,6 +79,11 @@ bool Renderer::init(int panel_width, int panel_height, int rotation, std::string
     const bool sideways = rotation == 90 || rotation == 270;
     width_ = sideways ? h : w;
     height_ = sideways ? w : h;
+    panel_width_ = w;
+    panel_height_ = h;
+    std::copy(t.row0, t.row0 + 2, row0_);
+    std::copy(t.row1, t.row1 + 2, row1_);
+    std::copy(t.offset, t.offset + 2, offset_);
 
     GLuint vs = compile(GL_VERTEX_SHADER, eye_vertex_shader, error);
     if (!vs)
@@ -129,6 +135,14 @@ bool Renderer::init(int panel_width, int panel_height, int rotation, std::string
     glViewport(0, 0, panel_width, panel_height);
     glClearColor(0, 0, 0, 1);
     return true;
+}
+
+void Renderer::panel_to_logical(float px, float py, float &x, float &y) const
+{
+    const float bx = px * panel_width_;
+    const float by = (1 - py) * panel_height_;  // origin bottom left, like the GPU
+    x = row0_[0] * bx + row0_[1] * by + offset_[0];
+    y = row1_[0] * bx + row1_[1] * by + offset_[1];
 }
 
 void Renderer::draw(const Face &face)

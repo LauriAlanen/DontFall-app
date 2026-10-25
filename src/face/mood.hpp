@@ -46,7 +46,7 @@ struct NamedMood {
 
 // The mood table. Tune the numbers here. Columns: width, height, radius,
 // lid_top, lid_angle, lid_bottom, smile, colour.
-inline constexpr std::array<NamedMood, 8> moods = {{
+inline constexpr std::array<NamedMood, 9> moods = {{
     {"neutral", {}},
     {"happy", {1.05f, 1.0f, 0.3f, 0, 0, 0.45f, 1, {1.0f, 0.8f, 0.2f}}},          // warm yellow
     {"sad", {1.0f, 0.9f, 0.25f, 0.3f, -0.35f, 0, 0, {0.25f, 0.4f, 1.0f}}},      // deep blue
@@ -55,6 +55,7 @@ inline constexpr std::array<NamedMood, 8> moods = {{
     {"sleepy", {1.0f, 1.0f, 0.25f, 0.55f, -0.1f, 0.1f, 0, {0.1f, 0.45f, 0.55f}}},  // dim
     {"focused", {1.0f, 0.85f, 0.2f, 0.15f, 0.12f, 0.05f, 0, {0.2f, 1.0f, 0.7f}}},  // green-cyan
     {"asleep", {1.05f, 1.0f, 0.25f, 0.9f, 0, 0.05f, 0, {0.05f, 0.25f, 0.3f}}},     // nearly shut, dark
+    {"squint", {1.05f, 0.95f, 0.3f, 0.32f, 0.08f, 0.3f, 0, {0.45f, 0.8f, 1.0f}}},  // poked
 }};
 
 inline constexpr Mood neutral = moods[0].mood;

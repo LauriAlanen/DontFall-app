@@ -26,7 +26,7 @@ class Googly {
 public:
     // dt: seconds since the last update. target: where the idle life looks.
     // push_x/y: from imu_push(), 0 without an IMU.
-    void update(float dt, const Gaze &target, float push_x, float push_y);
+    void update(float dt, Gaze target, float push_x, float push_y);
 
     const Gaze &gaze() const { return pos_; }
     float squash_x() const { return squash_x_; }
@@ -34,12 +34,17 @@ public:
     // How hard the eyes hit the edge in the last update, 0..1 (0: no hit).
     float hit() const { return hit_; }
 
+    // Dizzy: the eyes roll round in circles for a while (long press).
+    void spin();
+
 private:
     float push_x_ = 0;  // the push after smoothing
     float push_y_ = 0;
     Gaze pos_;
     Gaze vel_;
     float hit_ = 0;
+    float spin_left_ = 0;  // seconds of spinning left
+    float spin_phase_ = 0;
     float squash_x_ = 0;
     float squash_y_ = 0;
 };

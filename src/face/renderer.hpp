@@ -27,6 +27,10 @@ public:
     float width() const { return width_; }
     float height() const { return height_; }
 
+    // A point on the panel, 0..1 from its top left corner (how SDL reports
+    // touches), in logical pixels.
+    void panel_to_logical(float px, float py, float &x, float &y) const;
+
     void draw(const Face &face);
 
 private:
@@ -43,6 +47,11 @@ private:
     GLint u_color_ = -1;
     float width_ = 0;
     float height_ = 0;
+    float panel_width_ = 0;
+    float panel_height_ = 0;
+    float row0_[2] {};  // panel pixels (origin bottom left) to logical
+    float row1_[2] {};
+    float offset_[2] {};
 };
 
 } // namespace dontfall::face
