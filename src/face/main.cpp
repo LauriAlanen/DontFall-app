@@ -11,8 +11,9 @@
 // hold a finger down and they get dizzy. Touch never commands the robot.
 //
 // Camera: while the PC's vision node sees a face (/vision/faces), the eyes
-// look at it instead of glancing around. Without the PC, nothing arrives
-// and the face just keeps its idle life.
+// look at it instead of glancing around, and someone coming or nobody
+// being around changes the mood (mood_picker.hpp). Without the PC, nothing
+// arrives and the face just keeps its idle life.
 //
 // It is also the ROS 2 node dontfall_face: it subscribes to the M4's IMU
 // (/dontfall_m4/imu) and statuses (/diagnostics); the robot's state picks
@@ -66,6 +67,8 @@ constexpr auto imu_max_age = 500ms;
 // A face not seen for this long is gone (detections come at 15 Hz, and
 // the vision node misses one now and then).
 constexpr auto face_lost = 300ms;
+// No /vision/faces for this long: the vision node or the PC is gone.
+constexpr auto vision_lost = 1s;
 // A hit of the googly eyes against their edge at least this hard (0..1) is
 // a knock that surprises the face.
 constexpr float bump_hit = 0.6f;
@@ -222,7 +225,11 @@ int main(int argc, char **argv)
                 if (sample && now - sample->received <= imu_max_age)
                     dontfall::face::imu_push(sample->ax, sample->ay, push_x, push_y);
                 const auto seen = node->face();
-                if (seen && now - seen->received <= face_lost)
+                const auto faces_received = node->faces_received();
+                dontfall::face::Company company;
+                company.watching = faces_received && now - *faces_received <= vision_lost;
+                company.someone = seen && now - seen->received <= face_lost;
+                if (company.someone)
                     idle.follow(dontfall::face::gaze_from_camera(seen->x, seen->y), now);
                 auto look = idle.at(now);
                 googly.update(std::chrono::duration<float>(now - last_frame).count(), look.gaze,
@@ -238,12 +245,16 @@ int main(int argc, char **argv)
                     const auto state = dontfall::face::robot_state(
                         now, sample ? &sample->received : nullptr, status ? &*status : nullptr);
                     dontfall::face::MoodChoice choice;
-                    if (picker.pick(now, state, googly.hit() >= bump_hit, choice)) {
+                    if (picker.pick(now, state, googly.hit() >= bump_hit, company, choice)) {
                         const auto name = dontfall::face::mood_name(choice.mood);
                         const bool fault = state == dontfall::face::RobotState::fault;
-                        std::printf("mood %.*s (%s%s%s)\n", static_cast<int>(name.size()),
+                        const char *camera = company.someone    ? ", someone there"
+                                             : company.watching ? ", nobody there"
+                                                                : "";
+                        std::printf("mood %.*s (%s%s%s%s)\n", static_cast<int>(name.size()),
                                     name.data(), dontfall::face::to_string(state),
-                                    fault ? ": " : "", fault ? status->fault_text.c_str() : "");
+                                    fault ? ": " : "", fault ? status->fault_text.c_str() : "",
+                                    camera);
                         mood.go(*choice.mood, choice.change, now);
                     }
                 }

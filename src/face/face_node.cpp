@@ -86,6 +86,10 @@ void FaceNode::on_faces(const vision_msgs::msg::Detection2DArray &msg)
 {
     if (now() - rclcpp::Time(msg.header.stamp) > rclcpp::Duration(face_max_age))
         return;
+    {
+        std::lock_guard lock(mutex_);
+        faces_received_ = Clock::now();
+    }
     const vision_msgs::msg::Detection2D *biggest = nullptr;
     for (const auto &d : msg.detections)
         if (!biggest || d.bbox.size_x * d.bbox.size_y > biggest->bbox.size_x * biggest->bbox.size_y)
@@ -116,6 +120,12 @@ std::optional<SeenFace> FaceNode::face() const
 {
     std::lock_guard lock(mutex_);
     return face_;
+}
+
+std::optional<Clock::time_point> FaceNode::faces_received() const
+{
+    std::lock_guard lock(mutex_);
+    return faces_received_;
 }
 
 } // namespace dontfall::face

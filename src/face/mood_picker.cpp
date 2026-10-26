@@ -22,12 +22,18 @@ constexpr float neutral_min_s = 6, neutral_max_s = 15;
 constexpr float passing_min_s = 2, passing_max_s = 4;
 // Not angry or sleepy: those mean a fault or a lost link.
 constexpr std::string_view passing_moods[] = {"happy", "sad", "surprised"};
+// The camera: someone gone at least this long is greeted when they come
+// back (shorter is a missed detection or a turned head), the greeting
+// lasts this long, and nobody for this long while disarmed is lonely.
+constexpr auto greet_after = 5s;
+constexpr auto greeting = 1500ms;
+constexpr auto lonely_after = 60s;
 
 } // namespace
 
 MoodPicker::MoodPicker(Clock::time_point now)
     : rng_(std::random_device {}()), state_since_(now),
-      passing_until_(now + seconds(neutral_min_s, neutral_max_s))
+      passing_until_(now + seconds(neutral_min_s, neutral_max_s)), alone_since_(now)
 {
 }
 
@@ -52,8 +58,24 @@ const Mood *MoodPicker::passing(Clock::time_point now)
     return passing_ ? passing_ : &mood_named("neutral");
 }
 
-bool MoodPicker::pick(Clock::time_point now, RobotState state, bool bumped, MoodChoice &choice)
+void MoodPicker::notice(Clock::time_point now, const Company &company)
 {
+    if (company.someone && !someone_ && now - alone_since_ >= greet_after) {
+        greeting_ = &mood_named(lonely_ ? "surprised" : "happy");
+        greeting_until_ = now + greeting;
+    }
+    // Nobody is missed while the camera isn't watching: the time alone
+    // starts over when it does.
+    if (!company.watching || (someone_ && !company.someone))
+        alone_since_ = now;
+    someone_ = company.someone;
+    lonely_ = company.watching && !company.someone && now - alone_since_ >= lonely_after;
+}
+
+bool MoodPicker::pick(Clock::time_point now, RobotState state, bool bumped,
+                      const Company &company, MoodChoice &choice)
+{
+    notice(now, company);
     if (state != state_) {
         if (state == RobotState::armed)
             surprised_until_ = now + arm_surprise;
@@ -88,9 +110,14 @@ bool MoodPicker::pick(Clock::time_point now, RobotState state, bool bumped, Mood
             want = &mood_named("squint");
         else if (now < surprised_until_)
             want = &mood_named("surprised");
+        else if (now < greeting_until_)
+            want = greeting_;
         else if (state == RobotState::armed)
             want = &mood_named("focused");
-        else
+        else if (lonely_) {
+            want = &mood_named("sleepy");
+            duration = fall_asleep;
+        } else
             want = passing(now);
         break;
     }

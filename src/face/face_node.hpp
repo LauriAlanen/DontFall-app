@@ -44,6 +44,9 @@ public:
     std::optional<M4Status> m4_status() const;
     // Updated only while a face is seen: its age says whether it still is.
     std::optional<SeenFace> face() const;
+    // When the last fresh /vision/faces arrived, with or without faces: the
+    // vision node is running and the camera is watching.
+    std::optional<Clock::time_point> faces_received() const;
 
 private:
     void on_imu(const sensor_msgs::msg::Imu &msg);
@@ -60,6 +63,7 @@ private:
     std::optional<ImuSample> imu_;
     std::optional<M4Status> m4_status_;
     std::optional<SeenFace> face_;
+    std::optional<Clock::time_point> faces_received_;
 };
 
 } // namespace dontfall::face
