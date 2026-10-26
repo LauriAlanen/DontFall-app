@@ -63,6 +63,17 @@ inline Gaze gaze_towards(float screen_width, float screen_height, float x, float
             limit((y - screen_height / 2) / (screen_height * reach_y_part))};
 }
 
+// The gaze that looks at a point in the camera's image: -1..1 from the
+// middle, + = right and down, the image as the camera sees it. The camera
+// looks the same way as the screen, so the image's left is the screen's
+// right as someone in front sees it: x is mirrored. The image's edges are
+// as far as the eyes reach. This is the one place for how the camera sits
+// next to the screen; the real mounting comes with the robot.
+inline Gaze gaze_from_camera(float x, float y)
+{
+    return {-x, y};
+}
+
 // True if a point (logical pixels) is on an eye, or within margin of it.
 inline bool on_eye(const Eye &eye, float x, float y, float margin)
 {

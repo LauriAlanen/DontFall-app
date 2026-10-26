@@ -25,6 +25,9 @@ public:
         duration_ = duration;
     }
 
+    // Where it is heading (or is).
+    const T &target() const { return to_; }
+
     T at(Clock::time_point now) const
     {
         if (duration_ <= Clock::duration::zero() || now >= start_ + duration_)

@@ -10,6 +10,10 @@
 // Touch: poke an eye and it squints, tap elsewhere and the eyes look there,
 // hold a finger down and they get dizzy. Touch never commands the robot.
 //
+// Camera: while the PC's vision node sees a face (/vision/faces), the eyes
+// look at it instead of glancing around. Without the PC, nothing arrives
+// and the face just keeps its idle life.
+//
 // It is also the ROS 2 node dontfall_face: it subscribes to the M4's IMU
 // (/dontfall_m4/imu) and statuses (/diagnostics); the robot's state picks
 // the mood (mood_picker.hpp). The node spins in its own thread; the render
@@ -59,6 +63,9 @@ constexpr auto demo_change = 400ms;
 constexpr auto stats_period = 5s;
 // IMU samples older than this count as no IMU (they come at 50 Hz).
 constexpr auto imu_max_age = 500ms;
+// A face not seen for this long is gone (detections come at 15 Hz, and
+// the vision node misses one now and then).
+constexpr auto face_lost = 300ms;
 // A hit of the googly eyes against their edge at least this hard (0..1) is
 // a knock that surprises the face.
 constexpr float bump_hit = 0.6f;
@@ -214,6 +221,9 @@ int main(int argc, char **argv)
                 const auto sample = node->imu();
                 if (sample && now - sample->received <= imu_max_age)
                     dontfall::face::imu_push(sample->ax, sample->ay, push_x, push_y);
+                const auto seen = node->face();
+                if (seen && now - seen->received <= face_lost)
+                    idle.follow(dontfall::face::gaze_from_camera(seen->x, seen->y), now);
                 auto look = idle.at(now);
                 googly.update(std::chrono::duration<float>(now - last_frame).count(), look.gaze,
                               push_x, push_y);

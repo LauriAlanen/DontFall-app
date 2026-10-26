@@ -23,6 +23,10 @@ public:
     void blink_now(Clock::time_point now);
     // Glance at a gaze point now and hold it a little longer (touched there).
     void look_at(const Gaze &gaze, Clock::time_point now);
+    // Look at someone the camera sees; call it every frame while they are
+    // seen. The eyes jump there when the gaze has moved far enough, and the
+    // glances wait until a while after the last call.
+    void follow(const Gaze &gaze, Clock::time_point now);
 
 private:
     float uniform(float lo, float hi) { return std::uniform_real_distribution<float>(lo, hi)(rng_); }

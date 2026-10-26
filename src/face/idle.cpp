@@ -1,6 +1,7 @@
 #include "idle.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace dontfall::face {
 
@@ -21,6 +22,12 @@ constexpr auto saccade = 90ms;
 constexpr float back_to_middle_chance = 0.4f;
 // Looking at a touch holds this long before the glances go on.
 constexpr auto look_at_hold = 2s;
+// Following a face: jump only when it moved this far (gaze units, -1..1),
+// so jitter in the detections doesn't make the eyes tremble. Real eyes
+// follow in small jumps too.
+constexpr float follow_dead_band = 0.12f;
+// The glances go on this long after the face was last followed.
+constexpr auto follow_hold = 1500ms;
 
 float ms(Clock::duration d)
 {
@@ -93,6 +100,15 @@ void Idle::look_at(const Gaze &gaze, Clock::time_point now)
 {
     gaze_.go(gaze, saccade, now);
     next_glance_ = now + look_at_hold;
+}
+
+void Idle::follow(const Gaze &gaze, Clock::time_point now)
+{
+    const Gaze &target = gaze_.target();
+    if (std::abs(gaze.x - target.x) > follow_dead_band ||
+        std::abs(gaze.y - target.y) > follow_dead_band)
+        gaze_.go(gaze, saccade, now);
+    next_glance_ = now + follow_hold;
 }
 
 } // namespace dontfall::face
